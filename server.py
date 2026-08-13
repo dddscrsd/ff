@@ -1,8 +1,9 @@
 import logging
+import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
 import json
-import datetime
+from datetime import datetime, timezone
 
 # --- Настройка логирования ---
 logging.basicConfig(
@@ -15,12 +16,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-LOGIN_PATHS = ["/login", "/auth", "/api/login", "/api/auth"]  # пути, которые считаем «входом»
+LOGIN_PATHS = ["/login", "/auth", "/api/login", "/api/auth"]
 
 
 class GameAuthHandler(BaseHTTPRequestHandler):
     def log_request(self, code='-', size='-'):
-        # переопределяем, чтобы не дублировать логи от базового класса
+        # отключаем стандартный логгер http.server, чтобы не дублировать
         pass
 
     def do_POST(self):
@@ -28,29 +29,24 @@ class GameAuthHandler(BaseHTTPRequestHandler):
         path = parsed_path.path
         query = parse_qs(parsed_path.query)
 
-        # читаем тело запроса
         content_length = int(self.headers.get('Content-Length', 0))
         body = self.rfile.read(content_length).decode('utf-8', errors='replace')
 
-        # логируем общий запрос
         logger.info(
             f"[REQUEST] {self.client_address[0]} | POST {path} | "
-            f"Content-Length: {content_length} | Body: {body[:512]}{'...' if len(body) > 512 else ''}"
+            f"Content-Length: {content_length} | Body preview: {body[:512]}{'...' if len(body) > 512 else ''}"
         )
 
-        # если это запрос на вход — отдельный лог
         if path in LOGIN_PATHS:
             logger.warning(
-                f"[LOGIN REQUEST] {self.client_address[0]} | Path: {path} | Query: {query} | Body: {body}"
+                f"[LOGIN REQUEST] {self.client_address[0]} | Path: {path} | Query: {query} | Full body: {body}"
             )
-            # тут можно добавить парсинг JSON и логирование конкретных полей (username, token и т.п.)
 
-        # для теста возвращаем простой JSON-ответ
         response = {
             "status": "ok",
             "message": "Request received",
             "path": path,
-            "timestamp": datetime.datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -67,7 +63,7 @@ class GameAuthHandler(BaseHTTPRequestHandler):
             "status": "ok",
             "message": "Server is running",
             "path": path,
-            "timestamp": datetime.datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -75,7 +71,9 @@ class GameAuthHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(response).encode("utf-8"))
 
 
-def run(host="0.0.0.0", port=8080):
+def run():
+    host = "0.0.0.0"
+    port = int(os.environ.get("PORT", 8080))  # берём из Railway, иначе 8080
     server_address = (host, port)
     httpd = HTTPServer(server_address, GameAuthHandler)
     logger.info(f"Starting server on {host}:{port}")
@@ -87,4 +85,3 @@ def run(host="0.0.0.0", port=8080):
 
 if __name__ == "__main__":
     run()
-
