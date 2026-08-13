@@ -1,3 +1,7 @@
 aiohttp
 protobuf
 cryptography
+requests
+
+
+
